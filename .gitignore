@@ -1,0 +1,16 @@
+# build outputs
+build/
+dist/
+*.spec
+.venv/
+.venv-linux/
+__pycache__/
+*.pyc
+# figures and data produced while testing
+*.png
+*.tiff
+*.tif
+*.pdf
+*.svg
+*.csv
+*.fcs
