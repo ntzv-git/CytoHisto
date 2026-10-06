@@ -2,6 +2,15 @@
 
 All notable changes to CytoHisto. Versions follow [semantic versioning](https://semver.org).
 
+## [1.3.0] - 2026-10-06
+### Added
+- **Only the selected files are plotted.** The file list accepts multiple selection
+  (Ctrl+click, Shift+click, Ctrl+A); the plot, the statistics and the saved figure follow the
+  selection. Newly imported files join the selection. The Y axis is recalculated on the
+  highest visible peak at every change of selection, unless a Y zoom is set.
+- "Remove" removes every selected file; "Up"/"Down" move the active file (the one shown in
+  "Selected curve", i.e. the last one clicked).
+
 ## [1.2.0] - 2026-10-06
 ### Changed
 - **Histogram resolution is now fixed at 1024 classes over the full scale**, whatever the

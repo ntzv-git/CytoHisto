@@ -40,7 +40,7 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 _EXPORT_BACKENDS = (backend_pdf, backend_svg)
 
 APP = "CytoHisto"
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 PALETTE = ["#000000", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 CHANNEL_CHOICES = ["256", "512", "1024", "2048", "4096", "8192", "16384", "32768", "65536",
                    "262144", "1048576"]
@@ -502,17 +502,21 @@ class App(BaseTk):
             v.trace_add("write", lambda *a: self.schedule())
 
     def _build_files(self, parent):
-        fr = ttk.LabelFrame(parent, text="FCS files (overlaid)", padding=6)
+        fr = ttk.LabelFrame(parent, text="FCS files (selected files are plotted)", padding=6)
         fr.pack(fill="x", pady=(10, 0))
         cols = ("file", "label", "input")
-        self.tree = ttk.Treeview(fr, columns=cols, show="tree headings", height=4, selectmode="browse")
+        self.tree = ttk.Treeview(fr, columns=cols, show="tree headings", height=4, selectmode="extended")
         self.tree.heading("#0", text="")
         self.tree.column("#0", width=52, minwidth=52, stretch=False, anchor="w")
         for c, t, w in zip(cols, ("File", "Label", "Input ch."), (160, 140, 70)):
             self.tree.heading(c, text=t)
             self.tree.column(c, width=w, anchor="w")
         self.tree.pack(fill="x")
-        self.tree.bind("<<TreeviewSelect>>", lambda e: self._fill_curve_form())
+        # only the selected files are plotted (Ctrl+click, Shift+click, Ctrl+A)
+        self.tree.bind("<<TreeviewSelect>>", lambda e: self._selection_changed())
+        self.tree.bind("<Control-Button-1>", self._ctrl_click)
+        self.tree.bind("<Control-a>", self._select_all)
+        self.tree.bind("<Control-A>", self._select_all)
         self._swatches = {}      # colour -> small square image shown in the list
         b = ttk.Frame(fr)
         b.pack(fill="x", pady=(4, 0))
@@ -667,30 +671,67 @@ class App(BaseTk):
                 "in_range": ranges.get(channel) or 65536})   # each file keeps its own range
             added += 1
         if added:
-            self._refresh_tree(len(self.files) - 1)
+            # the new files join the current selection, so they appear on the plot
+            keep = [int(i) for i in self.tree.selection()]
+            self._refresh_tree(keep + list(range(len(self.files) - added, len(self.files))),
+                               focus=len(self.files) - 1)
             self.schedule()
         if skipped:
             self.status.set("Already loaded: " + ", ".join(skipped))
 
     def remove(self):
-        i = self._index()
-        if i is None:
+        """Remove every selected file."""
+        sel = sorted((int(i) for i in self.tree.selection()), reverse=True)
+        if not sel:
             return
-        del self.files[i]
-        self._refresh_tree(min(i, len(self.files) - 1))
+        for i in sel:
+            del self.files[i]
+        nxt = min(sel[-1], len(self.files) - 1)
+        self._refresh_tree([nxt] if nxt >= 0 else [], focus=nxt if nxt >= 0 else None)
         self.schedule()
 
     def move(self, d):
+        """Move the active file (the one shown in 'Selected curve') up or down."""
         i = self._index()
         if i is None or not 0 <= i + d < len(self.files):
             return
+        sel = {int(k) for k in self.tree.selection()}
         self.files[i], self.files[i + d] = self.files[i + d], self.files[i]
-        self._refresh_tree(i + d)
+        swap = {i: i + d, i + d: i}
+        self._refresh_tree(sorted(swap.get(k, k) for k in sel), focus=i + d)
+        self.schedule()
+
+    def _ctrl_click(self, event):
+        """Ctrl+click toggles a row; Tk leaves the active row unchanged, so make the clicked
+        row active when it becomes selected (the form then shows it)."""
+        row = self.tree.identify_row(event.y)
+
+        def after():
+            if row and row in self.tree.selection():
+                self.tree.focus(row)
+            self._fill_curve_form()
+        self.after_idle(after)
+
+    def _select_all(self, _=None):
+        self.tree.selection_set(self.tree.get_children())
+        return "break"
+
+    def _plotted(self):
+        """Files to draw: the selected ones, in list order."""
+        return [self.files[int(i)] for i in sorted(self.tree.selection(), key=int)]
+
+    def _selection_changed(self):
+        # Tk moves the focus to the clicked row after this event: read it once it is done
+        self.after_idle(self._fill_curve_form)
         self.schedule()
 
     def _index(self):
+        """Active file: the last one clicked if it is selected, else the first selected."""
         sel = self.tree.selection()
-        return int(sel[0]) if sel else None
+        if not sel:
+            return None
+        foc = self.tree.focus()
+        return int(foc) if foc in sel else int(sel[0])
 
     def _swatch(self, color):
         if color not in self._swatches:
@@ -704,20 +745,31 @@ class App(BaseTk):
         return dict(image=self._swatch(f["color"]),
                     values=(os.path.basename(f["path"]), f["name"], f"{self._in_range(f):g}"))
 
-    def _refresh_tree(self, select=None):
+    def _refresh_tree(self, select=None, focus=None):
+        """Rebuild the list; select = index or list of indices to select."""
         self.tree.delete(*self.tree.get_children())
         for i, f in enumerate(self.files):
             self.tree.insert("", "end", iid=str(i), text="", **self._row_values(f))
-        if select is not None and 0 <= select < len(self.files):
-            self.tree.selection_set(str(select))
+        if isinstance(select, int):
+            select = [select]
+        select = [i for i in (select or []) if 0 <= i < len(self.files)]
+        if select:
+            if focus is None or focus not in select:
+                focus = select[-1]
+            self.tree.focus(str(focus))
+            self.tree.selection_set([str(i) for i in select])
+            self.tree.see(str(focus))
         else:
-            self._loading = True             # empty the form without touching any file
-            for v in (self.v_name, self.v_color, self.v_lw, self.v_lt, self.v_smooth,
-                      self.v_channel, self.v_gmin, self.v_gmax, self.v_in):
-                v.set("")
-            self._loading = False
-            self.swatch.configure(bg=self.cget("bg"))
-            self._enable_curve_form(False)
+            self._clear_curve_form()
+
+    def _clear_curve_form(self):
+        self._loading = True                 # empty the form without touching any file
+        for v in (self.v_name, self.v_color, self.v_lw, self.v_lt, self.v_smooth,
+                  self.v_channel, self.v_gmin, self.v_gmax, self.v_in):
+            v.set("")
+        self._loading = False
+        self.swatch.configure(bg=self.cget("bg"))
+        self._enable_curve_form(False)
 
     def _enable_curve_form(self, on):
         for w in self.curve_widgets:
@@ -730,7 +782,7 @@ class App(BaseTk):
     def _fill_curve_form(self):
         i = self._index()
         if i is None:
-            self._enable_curve_form(False)
+            self._clear_curve_form()
             return
         f = self.files[i]
         self._loading = True
@@ -908,15 +960,19 @@ class App(BaseTk):
 
     def preview(self):
         self._timer = None
-        if not self.files:
+        plotted = self._plotted()
+        if not plotted:
             self._clear_preview()
+            if self.files:
+                self.status.set("No file selected: select the files to plot "
+                                "(click, Ctrl+click, Shift+click, Ctrl+A in the list).")
             return
         try:
             g = self.settings()
             aw, ah = max(self.area.winfo_width() - 10, 100), max(self.area.winfo_height() - 10, 100)
             # real figure size, scaled to the area: the preview has the exact proportions
             dpi = min(aw / (g["width"] / 25.4), ah / (g["height"] / 25.4))
-            fig, stats, info = draw(self.files, g, self.cache, dpi=dpi)
+            fig, stats, info = draw(plotted, g, self.cache, dpi=dpi)
         except Exception as e:
             self.status.set(f"Error: {e}")
             return
@@ -986,8 +1042,9 @@ class App(BaseTk):
 
     # ----- saving -----
     def save_figure(self):
-        if not self.files:
-            messagebox.showinfo(APP, "Add at least one .fcs file first.")
+        plotted = self._plotted()
+        if not plotted:
+            messagebox.showinfo(APP, "Select at least one file to plot first.")
             return
         formats = {"PNG": ".png", "TIFF": ".tiff", "PDF": ".pdf", "SVG": ".svg"}
         chosen = tk.StringVar(self, value="PNG")   # format picked in the dialog's type list
@@ -1003,7 +1060,7 @@ class App(BaseTk):
         try:
             g = self.settings()
             dpi = g["px"] / (g["width"] / 25.4)
-            fig, _, _ = draw(self.files, g, self.cache, dpi=dpi)
+            fig, _, _ = draw(plotted, g, self.cache, dpi=dpi)
             ext = os.path.splitext(path)[1].lower()
             opts = {"pil_kwargs": {"compression": "tiff_lzw"}} if ext in (".tif", ".tiff") else {}
             fig.savefig(path, dpi=dpi, facecolor="white", **opts)
@@ -1066,7 +1123,7 @@ class App(BaseTk):
         except Exception as e:
             messagebox.showerror(APP, f"Unreadable settings file:\n{e}")
             return
-        self._refresh_tree(0 if self.files else None)
+        self._refresh_tree(list(range(len(self.files))), focus=0 if self.files else None)
         self.schedule()
 
 

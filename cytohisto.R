@@ -7,7 +7,7 @@
 #
 # Run "Rscript cytohisto.R -h" for the list of options.
 
-VERSION <- "1.2.0"
+VERSION <- "1.3.0"
 
 suppressPackageStartupMessages(library(ggplot2))
 
