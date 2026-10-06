@@ -7,9 +7,11 @@
 #
 # Run "Rscript cytohisto.R -h" for the list of options.
 
+VERSION <- "1.1.0"
+
 suppressPackageStartupMessages(library(ggplot2))
 
-help_text <- '
+help_text <- paste0("CytoHisto ", VERSION, " (R command-line version)\n", '
 Usage:
   Rscript cytohisto.R [shared options] -f A.fcs [options for A] -f B.fcs [options for B] ...
 
@@ -27,6 +29,8 @@ default for every file):
                              in events per channel, so peak height does not change
   -g, --gate MIN,MAX         highlighted region in the curve colour + %, mean, CV in the console
   -p, --parameter NAME       parameter to plot (default: DNA if present, else the first non-time one)
+  -i, --in-channels N        input range of this file (default: read from the file, $PnR);
+                             files with different ranges are each converted with their own
       --label-pos X,Y        position of the curve label (with -L; default: above the highest
                              visible peak)
 
@@ -35,8 +39,7 @@ Shared options:
                              (default histogram)
   -x, --xlab TEXT            X axis title (default "Fluorescence intensity (channels)")
   -y, --ylab TEXT            Y axis title (default "Count")
-  -i, --in-channels N        input range of the data (default: read from the file, $PnR)
-  -C, --channels N           output channels = X axis resolution (default 1024)
+  -C, --channels N           output channels = X axis resolution, same for all files (default 1024)
   -X, --xlim MIN,MAX         X zoom (e.g. 50,250); the Y axis fits the visible peaks
   -L, --labels               write each curve name above its peak (instead of a legend)
   -P, --pixels WxH           image size in pixels (default 2000x1000); text, lines and ticks
@@ -52,13 +55,14 @@ Shared options:
       --x-steps L[,G[,T]]    X steps: labels, grid + long ticks, short ticks; missing values are
                              derived (G = L/2, T = G/5). Default: auto from the visible range
       --y-steps L[,T]        Y steps: labels + grid, short ticks (T = L/5 if omitted). Default: auto
+  -v, --version              show the version
   -h, --help                 show this help
 
 Example:
   Rscript cytohisto.R -s 2 -L -X 50,250 -o comparison.png -P 3000 \\
       -f control.fcs -n "Diploid" -c grey40 -t dashed \\
       -f 313.fcs     -n "313" -c "#D55E00" -w 0.8 -g 85,105
-'
+')
 
 # ---- HTML/CSS colours ----------------------------------------------------------
 # R already knows #RRGGBB and most CSS names; add the missing ones, #RGB and rgb(r, g, b).
@@ -81,12 +85,12 @@ css_color <- function(x) {
 # ---- Command-line arguments ------------------------------------------------------
 parse_args <- function(args) {
   g <- list(output = "histogram", xlab = "Fluorescence intensity (channels)", ylab = "Count",
-            in_channels = NULL, channels = 1024, x_steps = NULL, y_steps = NULL,
+            channels = 1024, x_steps = NULL, y_steps = NULL,
             xlim = NULL, labels = FALSE, width = 170, height = 85, dpi = 600,
             fonts = c(labels = 9, xtitle = 9, ytitle = 9, xvalues = 7, yvalues = 7),
             pixels = c(2000, 1000))
   defaults <- list(name = NULL, color = NULL, linewidth = 0.5, linetype = "solid", smooth = 1,
-                   gate = NULL, parameter = NULL, label_pos = NULL)
+                   gate = NULL, parameter = NULL, label_pos = NULL, in_range = NULL)
   files <- list()
   nums <- function(x, n, opt) {
     v <- suppressWarnings(as.numeric(strsplit(x, ",")[[1]]))
@@ -98,6 +102,7 @@ parse_args <- function(args) {
   while (i <= length(args)) {
     opt <- args[i]
     if (opt %in% c("-h", "--help")) { cat(help_text); quit(status = 0) }
+    if (opt %in% c("-v", "--version")) { cat("CytoHisto", VERSION, "\n"); quit(status = 0) }
     if (opt %in% c("-L", "--labels")) { g$labels <- TRUE; i <- i + 1; next }
     if (i == length(args)) stop("Option ", opt, " expects a value.")
     val <- args[i + 1]
@@ -118,7 +123,7 @@ parse_args <- function(args) {
       "-o" = , "--output"      = { g$output <- val },
       "-x" = , "--xlab"        = { g$xlab <- val },
       "-y" = , "--ylab"        = { g$ylab <- val },
-      "-i" = , "--in-channels" = { g$in_channels <- nums(val, 1, opt) },
+      "-i" = , "--in-channels" = set("in_range", nums(val, 1, opt)),
       "-C" = , "--channels"    = { g$channels <- nums(val, 1, opt) },
       "-X" = , "--xlim"        = { g$xlim <- sort(nums(val, 2, opt)) },
       "-W" = , "--width"       = { g$width <- nums(val, 1, opt) },
@@ -138,7 +143,7 @@ parse_args <- function(args) {
     i <- i + 2
   }
   if (!length(files)) { cat(help_text); stop("No .fcs file given (option -f).") }
-  if (g$channels <= 1 || (!is.null(g$in_channels) && g$in_channels <= 0))
+  if (g$channels <= 1 || any(vapply(files, function(f) isTRUE(f$in_range <= 1), TRUE)))
     stop("Channel numbers must be positive.")
   list(g = g, files = files)
 }
@@ -230,7 +235,8 @@ for (i in seq_len(n)) {
   if (!f$parameter %in% names(d))
     stop("Parameter '", f$parameter, "' not found in ", basename(f$path), ". Available: ",
          paste(names(d), collapse = ", "))
-  in_range <- if (!is.null(g$in_channels)) g$in_channels else fcs$ranges[[f$parameter]]
+  # each file is converted with its own input range (set with -i, otherwise read from the file)
+  in_range <- if (!is.null(f$in_range)) f$in_range else fcs$ranges[[f$parameter]]
   v <- d[[f$parameter]] * out / in_range                     # input range -> output channels
   if (is.null(f$name)) f$name <- sub("\\.fcs$", "", basename(f$path), ignore.case = TRUE)
   if (is.null(f$color)) f$color <- palette[(i - 1) %% length(palette) + 1]

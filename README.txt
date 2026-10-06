@@ -1,5 +1,6 @@
 CytoHisto - publication-ready flow cytometry histograms
 =======================================================
+Version 1.1.0 (see CHANGELOG.md). "python cytohisto.py --version" / "Rscript cytohisto.R --version".
 
 Works with any FCS 2.0 / 3.0 / 3.1 list-mode file, including files whose parameters are
 stored with different bit widths (which flowCore cannot read).
@@ -32,8 +33,7 @@ Run without building (any system)
   or in conda run: conda install -c conda-forge "tk=*=xft_*")
 
 Graphical application
-  - Plot settings (all curves): axis titles, input channels (detected from the file, $PnR),
-    output channels (X axis resolution), X zoom, axis steps (empty = automatic; e.g.
+  - Plot settings (all curves): axis titles, output channels (X axis resolution), X zoom, axis steps (empty = automatic; e.g.
     "200,100,20" for X = labels, grid, ticks and "100,20" for Y = labels, ticks; steps
     too small for the range are ignored), names above the peaks or legend.
   - Image: size in pixels (default 2000 x 1000) and five text sizes (labels, X title,
@@ -46,7 +46,11 @@ Graphical application
   - Selected curve: click a file in the list to set its label (name on the plot and in the
     statistics), colour (#D55E00, #d50,
     rgb(213,94,0), crimson... or "Pick..."), line width, line type, smoothing, gate
-    (highlighted region + %, mean, CV) and parameter.
+    (highlighted region + %, mean, CV), parameter and input channels.
+  - Input channels are set per file: each file is read with its own range ($PnR, shown in
+    the list), so files from instruments with different resolutions (e.g. 1024 and 65536)
+    are converted to the same output channels. The value can be changed if a file declares
+    a wrong range.
   - The preview updates automatically, with the exact proportions of the saved image.
   - Move the mouse over the plot: a cursor line follows it and the line above the plot shows
     the cursor position (x, y).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CytoHisto: publication-ready flow cytometry histograms.
+"""CytoHisto: publication-ready flow cytometry histograms (version: see __version__).
 
 Graphical tool to overlay one or more .fcs files, style each curve and save the
 figure (PNG, TIFF, PDF, SVG). Works with any FCS 2.0/3.0/3.1 list-mode file.
@@ -36,6 +36,7 @@ matplotlib.rcParams["font.sans-serif"] = ["Arial", "Liberation Sans", "DejaVu Sa
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 APP = "CytoHisto"
+__version__ = "1.1.0"
 PALETTE = ["#000000", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 CHANNEL_CHOICES = ["256", "512", "1024", "2048", "4096", "8192", "16384", "32768", "65536",
                    "262144", "1048576"]
@@ -175,7 +176,7 @@ def prepare(files, g, cache):
     for f in files:
         cols, ranges = cache[f["path"]]
         channel = f["channel"] if f["channel"] in cols else default_channel(list(cols))
-        in_range = g["in_range"] or ranges.get(channel) or 65536
+        in_range = f.get("in_range") or ranges.get(channel) or 65536   # this file's own range
         v = cols[channel] * out / in_range                # input range -> output channels
         smooth = max(1.0, float(f["smooth"]))
         w = smooth
@@ -318,7 +319,7 @@ def draw(files, g, cache, dpi=100):
 class App(BaseTk):
     def __init__(self):
         super().__init__()
-        self.title(f"{APP} - flow cytometry histograms")
+        self.title(f"{APP} {__version__} - flow cytometry histograms")
         self.geometry(f"{min(1350, self.winfo_screenwidth() - 40)}x"
                       f"{min(820, self.winfo_screenheight() - 80)}+10+10")
         self.minsize(900, 500)
@@ -431,7 +432,6 @@ class App(BaseTk):
         fr.columnconfigure(1, weight=1)
         self.v_xlab = tk.StringVar(value="Fluorescence intensity (channels)")
         self.v_ylab = tk.StringVar(value="Count")
-        self.v_in = tk.StringVar()
         self.v_out = tk.StringVar(value="1024")
         self.v_xmin, self.v_xmax = tk.StringVar(), tk.StringVar()
         self.v_labels = tk.BooleanVar(value=True)
@@ -439,10 +439,8 @@ class App(BaseTk):
 
         self._row(fr, 0, "X axis title", self.v_xlab, 30)
         self._row(fr, 1, "Y axis title", self.v_ylab, 30)
-        cb_in = ttk.Combobox(fr, textvariable=self.v_in, width=10, values=CHANNEL_CHOICES)
-        self._row(fr, 2, "Input channels", widget=cb_in, hint="detected from the file ($PnR)")
         cb = ttk.Combobox(fr, textvariable=self.v_out, width=10, values=CHANNEL_CHOICES)
-        self._row(fr, 3, "Output channels", widget=cb, hint="X axis resolution")
+        self._row(fr, 2, "Output channels", widget=cb, hint="X axis resolution (all curves)")
         self._row(fr, 4, "X zoom", widget=self._pair(fr, self.v_xmin, self.v_xmax), hint="empty = all")
         self._row(fr, 5, "X steps", self.v_xsteps, 12, hint="labels, grid, ticks (empty = auto)")
         self._row(fr, 6, "Y steps", self.v_ysteps, 12, hint="labels, ticks (empty = auto)")
@@ -450,7 +448,7 @@ class App(BaseTk):
         ttk.Checkbutton(cf, text="Names above the peaks (otherwise legend)",
                         variable=self.v_labels).pack(anchor="w")
         cf.grid(row=7, column=0, columnspan=3, sticky="w", pady=(2, 0))
-        for v in (self.v_xlab, self.v_ylab, self.v_in, self.v_out, self.v_xmin, self.v_xmax,
+        for v in (self.v_xlab, self.v_ylab, self.v_out, self.v_xmin, self.v_xmax,
                   self.v_labels, self.v_xsteps, self.v_ysteps):
             v.trace_add("write", lambda *a: self.schedule())
 
@@ -477,11 +475,11 @@ class App(BaseTk):
     def _build_files(self, parent):
         fr = ttk.LabelFrame(parent, text="FCS files (overlaid)", padding=6)
         fr.pack(fill="x", pady=(10, 0))
-        cols = ("file", "label")
+        cols = ("file", "label", "input")
         self.tree = ttk.Treeview(fr, columns=cols, show="tree headings", height=4, selectmode="browse")
         self.tree.heading("#0", text="")
         self.tree.column("#0", width=52, minwidth=52, stretch=False, anchor="w")
-        for c, t, w in zip(cols, ("File", "Label"), (180, 180)):
+        for c, t, w in zip(cols, ("File", "Label", "Input ch."), (160, 140, 70)):
             self.tree.heading(c, text=t)
             self.tree.column(c, width=w, anchor="w")
         self.tree.pack(fill="x")
@@ -530,8 +528,13 @@ class App(BaseTk):
         self.curve_widgets += [e1, e2]
         self.cb_channel = ttk.Combobox(fr, textvariable=self.v_channel, state="readonly", width=12)
         self.curve_widgets.append(self._row(fr, 6, "Parameter", widget=self.cb_channel))
+        self.v_in = tk.StringVar()
+        cb_in = ttk.Combobox(fr, textvariable=self.v_in, width=12, values=CHANNEL_CHOICES)
+        self._editable_combos = {cb_in}          # typed values allowed (not read-only)
+        self.curve_widgets.append(self._row(fr, 7, "Input channels", widget=cb_in,
+                                            hint="read from this file ($PnR)"))
         for v in (self.v_name, self.v_color, self.v_lw, self.v_lt, self.v_smooth, self.v_channel,
-                  self.v_gmin, self.v_gmax):
+                  self.v_gmin, self.v_gmax, self.v_in):
             v.trace_add("write", lambda *a: self._curve_form_changed())
 
     def _build_toolbar(self, parent):
@@ -631,9 +634,8 @@ class App(BaseTk):
             self.files.append({
                 "path": p, "name": os.path.splitext(os.path.basename(p))[0],
                 "color": PALETTE[len(self.files) % len(PALETTE)], "linewidth": 0.5,
-                "linetype": "solid", "smooth": 1, "gate": None, "channel": channel})
-            if not self.v_in.get().strip():           # show the detected input range
-                self.v_in.set(f"{ranges.get(channel, 65536):g}")
+                "linetype": "solid", "smooth": 1, "gate": None, "channel": channel,
+                "in_range": ranges.get(channel) or 65536})   # each file keeps its own range
             added += 1
         if added:
             self._refresh_tree(len(self.files) - 1)
@@ -671,7 +673,7 @@ class App(BaseTk):
 
     def _row_values(self, f):
         return dict(image=self._swatch(f["color"]),
-                    values=(os.path.basename(f["path"]), f["name"]))
+                    values=(os.path.basename(f["path"]), f["name"], f"{self._in_range(f):g}"))
 
     def _refresh_tree(self, select=None):
         self.tree.delete(*self.tree.get_children())
@@ -682,7 +684,7 @@ class App(BaseTk):
         else:
             self._loading = True             # empty the form without touching any file
             for v in (self.v_name, self.v_color, self.v_lw, self.v_lt, self.v_smooth,
-                      self.v_channel, self.v_gmin, self.v_gmax):
+                      self.v_channel, self.v_gmin, self.v_gmax, self.v_in):
                 v.set("")
             self._loading = False
             self.swatch.configure(bg=self.cget("bg"))
@@ -691,7 +693,8 @@ class App(BaseTk):
     def _enable_curve_form(self, on):
         for w in self.curve_widgets:
             try:
-                w.configure(state=("readonly" if isinstance(w, ttk.Combobox) else "normal") if on else "disabled")
+                editable = not isinstance(w, ttk.Combobox) or w in self._editable_combos
+                w.configure(state=("normal" if editable else "readonly") if on else "disabled")
             except tk.TclError:
                 pass
 
@@ -709,8 +712,13 @@ class App(BaseTk):
         self.v_smooth.set(f"{f['smooth']:g}"); self.v_channel.set(f["channel"])
         self.v_gmin.set(f"{f['gate'][0]:g}" if f["gate"] else "")
         self.v_gmax.set(f"{f['gate'][1]:g}" if f["gate"] else "")
+        self.v_in.set(f"{self._in_range(f):g}")
         self.swatch.configure(bg=f["color"])
         self._loading = False
+
+    def _in_range(self, f):
+        """Input range of a file: set by the user, otherwise read from the file ($PnR)."""
+        return f.get("in_range") or self.cache[f["path"]][1].get(f["channel"]) or 65536
 
     def _curve_form_changed(self):
         if self._loading:
@@ -733,7 +741,20 @@ class App(BaseTk):
             except ValueError:
                 pass
         f["linetype"] = self.v_lt.get() or "solid"
-        f["channel"] = self.v_channel.get() or f["channel"]
+        new_channel = self.v_channel.get() or f["channel"]
+        if new_channel != f["channel"]:          # other parameter: take its own range from the file
+            f["channel"] = new_channel
+            f["in_range"] = self.cache[f["path"]][1].get(new_channel) or 65536
+            self._loading = True
+            self.v_in.set(f"{f['in_range']:g}")
+            self._loading = False
+        else:
+            try:
+                val = number(self.v_in.get())
+                if val and val > 1:
+                    f["in_range"] = val
+            except ValueError:
+                pass
         try:
             a, b = number(self.v_gmin.get()), number(self.v_gmax.get())
             f["gate"] = sorted([a, b]) if a is not None and b is not None else None
@@ -752,9 +773,8 @@ class App(BaseTk):
     # ----- shared settings -----
     def settings(self):
         g = {"xlab": self.v_xlab.get(), "ylab": self.v_ylab.get(), "labels": self.v_labels.get()}
-        g["in_range"] = number(self.v_in.get())
         g["out_channels"] = number(self.v_out.get(), 1024)
-        if g["out_channels"] <= 1 or (g["in_range"] is not None and g["in_range"] <= 0):
+        if g["out_channels"] <= 1:
             raise ValueError("Channel numbers must be positive.")
         xmin, xmax = number(self.v_xmin.get()), number(self.v_xmax.get())
         g["xlim"] = [xmin, xmax] if xmin is not None and xmax is not None and xmin != xmax else None
@@ -915,7 +935,7 @@ class App(BaseTk):
         self.status.set(f"Statistics saved: {path}")
 
     def _shared_vars(self):
-        return {"xlab": self.v_xlab, "ylab": self.v_ylab, "in_channels": self.v_in,
+        return {"xlab": self.v_xlab, "ylab": self.v_ylab, 
                 "out_channels": self.v_out, "xmin": self.v_xmin, "xmax": self.v_xmax,
                 "labels": self.v_labels, "x_steps": self.v_xsteps,
                 "y_steps": self.v_ysteps, "px_width": self.v_pxw, "px_height": self.v_pxh,
@@ -955,4 +975,7 @@ class App(BaseTk):
 
 
 if __name__ == "__main__":
+    if "--version" in sys.argv[1:]:
+        print(f"{APP} {__version__}")
+        sys.exit(0)
     App().mainloop()
