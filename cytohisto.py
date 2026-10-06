@@ -40,7 +40,7 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 _EXPORT_BACKENDS = (backend_pdf, backend_svg)
 
 APP = "CytoHisto"
-__version__ = "1.3.1"
+__version__ = "1.3.2"
 PALETTE = ["#000000", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 CHANNEL_CHOICES = ["256", "512", "1024", "2048", "4096", "8192", "16384", "32768", "65536",
                    "262144", "1048576"]
@@ -62,9 +62,23 @@ BASE_BINS = 1024   # beyond this, user steps are too small: automatic steps used
 # FCS reader (handles parameters with different bit widths)
 # ---------------------------------------------------------------------------
 def read_fcs(path):
-    """Return (columns, ranges): {name: values}, {name: $PnR}."""
+    """Return (columns, ranges): {name: values}, {name: $PnR}. Raises ValueError with a clear
+    message if the file is not a readable FCS file."""
     with open(path, "rb") as fh:
         raw = fh.read()
+    if not raw.startswith(b"FCS"):
+        raise ValueError("not an FCS file")
+    try:
+        return _parse_fcs(raw)
+    except ValueError:
+        raise
+    except KeyError as e:
+        raise ValueError(f"damaged FCS file (keyword {e} missing)")
+    except Exception as e:
+        raise ValueError(f"damaged FCS file ({e})")
+
+
+def _parse_fcs(raw):
     header = raw[:58].decode("ascii", "replace")
     pos = [header[10:18], header[18:26], header[26:34], header[34:42]]
     pos = [int(p) if p.strip().isdigit() else 0 for p in pos]
@@ -88,11 +102,15 @@ def read_fcs(path):
 
     if dtype in ("F", "D"):
         dt = np.dtype(order + ("f4" if dtype == "F" else "f8"))
+        if len(data) < dt.itemsize * npar * ntot:
+            raise ValueError("incomplete FCS file (data truncated)")
         m = np.frombuffer(data, dtype=dt, count=npar * ntot).reshape(ntot, npar)
         cols = {names[i]: m[:, i].astype(float) for i in range(npar)}
     elif dtype == "I":
         nbytes = [b // 8 for b in bits]
         row = sum(nbytes)
+        if len(data) < row * ntot:
+            raise ValueError("incomplete FCS file (data truncated)")
         m = np.frombuffer(data, dtype=np.uint8, count=row * ntot).reshape(ntot, row)
         cols, c = {}, 0
         for i in range(npar):
@@ -1107,18 +1125,55 @@ class App(BaseTk):
                 **{f"font_{key}": var for key, var in self.v_fonts.items()}}
 
     def save_settings(self):
-        if not self._plotted():
-            messagebox.showinfo(APP, "Select the files to save in the settings first.")
+        """Save the shared settings and ALL imported files (selected or not) with the selection."""
+        if not self.files:
+            messagebox.showinfo(APP, "Add at least one .fcs file first.")
             return
         path = filedialog.asksaveasfilename(title="Save settings", defaultextension=".json",
                                             filetypes=[("Settings", "*.json")], initialfile="settings")
         if not path:
             return
-        plotted = self._plotted()            # like the figure: only the selected files
-        data = {"shared": {k: v.get() for k, v in self._shared_vars().items()}, "files": plotted}
+        folder = os.path.dirname(os.path.abspath(path))
+        files = []
+        for f in self.files:
+            entry = dict(f)
+            entry["path"] = os.path.abspath(f["path"])
+            try:                                 # also store the path relative to the settings file,
+                entry["rel_path"] = os.path.relpath(entry["path"], folder)  # to move both together
+            except ValueError:                   # (Windows: other drive)
+                entry.pop("rel_path", None)
+            files.append(entry)
+        data = {"app": APP, "version": __version__,
+                "shared": {k: v.get() for k, v in self._shared_vars().items()},
+                "files": files, "selected": sorted(int(i) for i in self.tree.selection())}
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
-        self.status.set(f"Settings saved ({len(plotted)} selected file(s)): {path}")
+        self.status.set(f"Settings saved ({len(files)} file(s), {len(data['selected'])} selected): {path}")
+
+    @staticmethod
+    def _find_file(entry, folder):
+        """Where is this .fcs now? Saved path, then relative to the settings file, then next to it."""
+        candidates = [entry.get("path", "")]
+        if entry.get("rel_path"):
+            candidates.append(os.path.join(folder, entry["rel_path"]))
+        candidates.append(os.path.join(folder, os.path.basename(entry.get("path", ""))))
+        for c in candidates:
+            if c and os.path.isfile(c):
+                return os.path.abspath(c)
+        return None
+
+    @staticmethod
+    def _search_folder(root, names, limit=20000):
+        """Look for files by name in a folder and its sub-folders (bounded search)."""
+        found, seen = {}, 0
+        for dirpath, _, filenames in os.walk(root):
+            for n in filenames:
+                seen += 1
+                if n in names and n not in found:
+                    found[n] = os.path.join(dirpath, n)
+            if len(found) == len(names) or seen > limit:
+                break
+        return found
 
     def open_settings(self):
         path = filedialog.askopenfilename(title="Open settings", filetypes=[("Settings", "*.json")])
@@ -1127,22 +1182,74 @@ class App(BaseTk):
         try:
             with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
-            for k, v in data.get("shared", {}).items():
-                if k in self._shared_vars():
-                    self._shared_vars()[k].set(v)
-            files = []
-            for f in data.get("files", []):
-                if f["path"] not in self.cache:
-                    self.cache[f["path"]] = read_fcs(f["path"])
-                files.append(f)
-            self.files = files
-            self._applied_out = number(self.v_out.get(), 1024)
+            entries = list(data.get("files", []))
+            shared = data.get("shared", {})
         except Exception as e:
             messagebox.showerror(APP, f"Unreadable settings file:\n{e}")
             return
-        self._refresh_tree(list(range(len(self.files))), focus=0 if self.files else None)
-        self.schedule()
+        folder = os.path.dirname(os.path.abspath(path))
 
+        # 1. locate every file (it may have been moved or deleted since the settings were saved)
+        located = [self._find_file(e, folder) for e in entries]
+        missing = [i for i, p in enumerate(located) if p is None]
+        if missing:
+            names = "\n".join("  " + os.path.basename(entries[i].get("path", "?")) for i in missing[:15])
+            more = f"\n  ... and {len(missing) - 15} more" if len(missing) > 15 else ""
+            if messagebox.askyesno(APP, f"{len(missing)} file(s) of these settings were not found "
+                                   f"(moved or deleted):\n{names}{more}\n\nSearch for them in a folder?"):
+                root = filedialog.askdirectory(title="Folder containing the .fcs files",
+                                               initialdir=folder)
+                if root:
+                    wanted = {os.path.basename(entries[i].get("path", "")) for i in missing}
+                    found = self._search_folder(root, wanted)
+                    for i in missing:
+                        located[i] = found.get(os.path.basename(entries[i].get("path", "")))
+
+        # 2. read the files that were found; the others are skipped, not fatal
+        files, skipped, old_to_new = [], [], {}
+        for i, (e, p) in enumerate(zip(entries, located)):
+            name = os.path.basename(e.get("path", "?"))
+            if p is None:
+                skipped.append(f"{name} (not found)")
+                continue
+            try:
+                if p not in self.cache:
+                    self.cache[p] = read_fcs(p)
+            except Exception as err:
+                skipped.append(f"{name} (unreadable: {err})")
+                continue
+            f = {k: v for k, v in e.items() if k != "rel_path"}
+            f["path"] = p
+            cols = self.cache[p][0]
+            if f.get("channel") not in cols:      # parameter missing in the file found
+                f["channel"] = default_channel(list(cols))
+            f.setdefault("name", os.path.splitext(name)[0])
+            f.setdefault("color", PALETTE[len(files) % len(PALETTE)])
+            for key, default in (("linewidth", 0.5), ("linetype", "solid"), ("smooth", 1),
+                                 ("gate", None)):
+                f.setdefault(key, default)
+            old_to_new[i] = len(files)
+            files.append(f)
+
+        # 3. apply the shared settings and the files, restore the selection
+        for k, v in shared.items():
+            if k in self._shared_vars():
+                self._shared_vars()[k].set(v)
+        self._applied_out = number(self.v_out.get(), 1024)
+        self.files = files
+        if "selected" in data:
+            sel = [old_to_new[i] for i in data["selected"] if i in old_to_new]
+        else:                                     # settings saved by an older version
+            sel = list(range(len(files)))
+        self._refresh_tree(sel, focus=sel[0] if sel else None)
+        self.schedule()
+        msg = f"Settings opened: {len(files)} file(s)"
+        if skipped:
+            msg += f", {len(skipped)} skipped"
+            messagebox.showwarning(APP, "These files could not be loaded and were skipped:\n"
+                                   + "\n".join("  " + x for x in skipped[:20])
+                                   + (f"\n  ... and {len(skipped) - 20} more" if len(skipped) > 20 else ""))
+        self.status.set(msg)
 
 if __name__ == "__main__":
     if "--version" in sys.argv[1:]:

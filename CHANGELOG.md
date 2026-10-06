@@ -2,6 +2,21 @@
 
 All notable changes to CytoHisto. Versions follow [semantic versioning](https://semver.org).
 
+## [1.3.2] - 2026-10-06
+### Changed
+- **Settings (JSON) store every imported file**, selected or not, with all its settings, plus
+  the selection, which is restored when the settings are opened. (In 1.3.1 only the selected
+  files were stored.) Figure and statistics still use the selected files only.
+- Each file is stored with its absolute path and its path relative to the settings file.
+
+### Added
+- **Moved or deleted files no longer prevent opening settings.** Each file is looked for at its
+  saved location, then relative to the settings file (a whole project folder can be moved),
+  then next to it. Missing files can be searched for by name in a folder of your choice
+  (sub-folders included); files still missing or unreadable are skipped and listed, and
+  everything else is loaded.
+- Clear error messages for files that are not FCS files or are truncated.
+
 ## [1.3.1] - 2026-10-06
 ### Changed
 - The file list is taller (8 rows) and has a scroll bar; the mouse wheel scrolls the list

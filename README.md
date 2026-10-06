@@ -7,7 +7,7 @@ content / ploidy) and exports a clean, journal-ready figure (PNG, TIFF, PDF, SVG
 with the peak statistics. It comes as a standalone desktop application (Windows, Linux) and
 as an R command-line script that produces the same figures.
 
-Version **1.3.1** - see [CHANGELOG.md](CHANGELOG.md).
+Version **1.3.2** - see [CHANGELOG.md](CHANGELOG.md).
 
 ![CytoHisto interface](docs/screenshot.png)
 
@@ -67,8 +67,9 @@ while you type. A cursor line shows the x / y coordinates under the mouse.
   server, no account, no internet connection, no data leaving the computer.
 - Files are added by **drag and drop**, **Ctrl+V** (files copied in the file manager) or the
   *Add...* button.
-- All settings (files, colours, gates, axes, sizes) are saved to a small **JSON** file, so a
-  figure can be regenerated identically later.
+- All settings (files, colours, gates, axes, sizes, selection) are saved to a small **JSON**
+  file, so a figure can be regenerated identically later - even after moving the project
+  folder: files are found relative to the settings file, or searched for in a folder.
 - The **R command-line version** produces the same figures from a script, for batch
   processing and reproducible pipelines.
 
@@ -79,7 +80,7 @@ while you type. A cursor line shows the x / y coordinates under the mouse.
 | System | Program |
 |---|---|
 | Windows 10/11 (64-bit) | [`CytoHisto-1.1.0-windows-x86_64.exe`](https://github.com/ntzv-git/cytohisto/raw/main/bin/windows/CytoHisto-1.1.0-windows-x86_64.exe) |
-| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.3.1-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.3.1-linux-x86_64) |
+| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.3.2-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.3.2-linux-x86_64) |
 
 Click a link to download the program. It runs on its own: nothing else needs to be installed.
 
@@ -91,8 +92,8 @@ Click a link to download the program. It runs on its own: nothing else needs to 
   It takes a few seconds to start (the program unpacks itself).
 - **Linux**: make the file executable, then run it:
   ```bash
-  chmod +x CytoHisto-1.3.1-linux-x86_64
-  ./CytoHisto-1.3.1-linux-x86_64
+  chmod +x CytoHisto-1.3.2-linux-x86_64
+  ./CytoHisto-1.3.2-linux-x86_64
   ```
 
 ---
@@ -110,7 +111,9 @@ Click a link to download the program. It runs on its own: nothing else needs to 
 4. **Selected curve**: the last file clicked; set its label, colour, line width and type, smoothing,
    gate, parameter and input channels.
 5. **Save figure...** (PNG, TIFF, PDF, SVG), **Statistics (CSV)...**, **Save / Open settings...**
-   Every save uses the selected files only.
+   The figure and the statistics use the selected files only; the settings keep every imported
+   file and the selection. If files were moved or deleted, opening the settings finds them
+   relative to the settings file or offers to search a folder, and skips the missing ones.
 
 ---
 
