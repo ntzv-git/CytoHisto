@@ -79,15 +79,12 @@ while you type. A cursor line shows the x / y coordinates under the mouse.
 
 | System | Program |
 |---|---|
-| Windows 10/11 (64-bit) | [`CytoHisto-1.1.0-windows-x86_64.exe`](https://github.com/ntzv-git/cytohisto/raw/main/bin/windows/CytoHisto-1.1.0-windows-x86_64.exe) |
+| Windows 10/11 (64-bit) | [`CytoHisto-1.3.2-windows-x86_64.exe`](https://github.com/ntzv-git/cytohisto/raw/main/bin/windows/CytoHisto-1.3.2-windows-x86_64.exe) |
 | Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.3.2-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.3.2-linux-x86_64) |
 
 Click a link to download the program. It runs on its own: nothing else needs to be installed.
 
-> The Windows 1.1.0 build is affected by the PDF/SVG export issue fixed in 1.1.2 (see the
-> changelog); PNG and TIFF work. An updated Windows build will replace it.
-
-- **Windows**: double-click `CytoHisto-1.1.0-windows-x86_64.exe`. The program is not signed,
+- **Windows**: double-click `CytoHisto-1.3.2-windows-x86_64.exe`. The program is not signed,
   so SmartScreen may show "Windows protected your PC": click *More info* then *Run anyway*.
   It takes a few seconds to start (the program unpacks itself).
 - **Linux**: make the file executable, then run it:
