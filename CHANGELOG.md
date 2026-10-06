@@ -2,6 +2,22 @@
 
 All notable changes to CytoHisto. Versions follow [semantic versioning](https://semver.org).
 
+## [1.2.0] - 2026-10-06
+### Changed
+- **Histogram resolution is now fixed at 1024 classes over the full scale**, whatever the
+  output channels, which only set the X axis unit. Changing the output channels no longer
+  changes the Y axis, and high resolutions (e.g. 65536 channels) no longer turn the curves
+  into unreadable, overlapping noise. Smoothing now merges classes (1 = 1024 classes).
+- Output channels are chosen from a list; when they change, the X zoom, X steps and gates
+  are rescaled so that they keep the same place on the curves.
+
+### Added
+- **Y zoom** (minimum and maximum of the Y axis); `-Y/--ylim` in the R version.
+
+### Fixed
+- The X zoom can no longer go beyond the channel range (0 to output channels): it is limited
+  and the field is corrected.
+
 ## [1.1.2] - 2026-10-06
 ### Fixed
 - Standalone programs (Linux and Windows builds): saving as PDF or SVG failed with

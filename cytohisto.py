@@ -40,7 +40,7 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 _EXPORT_BACKENDS = (backend_pdf, backend_svg)
 
 APP = "CytoHisto"
-__version__ = "1.1.2"
+__version__ = "1.2.0"
 PALETTE = ["#000000", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 CHANNEL_CHOICES = ["256", "512", "1024", "2048", "4096", "8192", "16384", "32768", "65536",
                    "262144", "1048576"]
@@ -51,7 +51,11 @@ MM = 72 / 25.4        # points per mm
 FONTS = [("labels", "Labels", 9), ("xtitle", "X title", 9), ("ytitle", "Y title", 9),
          ("xvalues", "X values", 7), ("yvalues", "Y values", 7)]
 REF_WIDTH = 170.0     # figure width (mm) the default sizes are designed for
-MAX_TICKS, MAX_LABELS = 400, 60   # beyond this, user steps are too small: automatic steps used
+MAX_TICKS, MAX_LABELS = 400, 60
+# Histogram resolution: the full scale is always cut into BASE_BINS classes, whatever the number
+# of output channels (which only sets the X axis unit). The Y axis (events per class) and the
+# shape of the curves therefore do not depend on the output channels.
+BASE_BINS = 1024   # beyond this, user steps are too small: automatic steps used
 
 
 # ---------------------------------------------------------------------------
@@ -183,11 +187,13 @@ def prepare(files, g, cache):
         in_range = f.get("in_range") or ranges.get(channel) or 65536   # this file's own range
         v = cols[channel] * out / in_range                # input range -> output channels
         smooth = max(1.0, float(f["smooth"]))
-        w = smooth
-        nb = math.ceil(out / w)
+        base = out / BASE_BINS                            # width of one class in output channels
+        w = base * smooth                                 # smoothing merges classes
+        nb = math.ceil(BASE_BINS / smooth)
         cnt = np.bincount(np.clip((v // w).astype(int), 0, nb - 1), minlength=nb)
-        x = np.arange(nb) * w + (w - 1) / 2
-        y = cnt / w                                       # events per channel
+        x = np.arange(nb) * w + (w - base) / 2            # at 1024 channels: x = channel number
+        y = cnt / smooth                                  # events per class: independent of
+                                                          # the output channels and smoothing
         vis = (x >= xlim[0]) & (x <= xlim[1])
         curves.append((x[vis], y[vis]))
         ok = inside_edges(x)
@@ -230,9 +236,18 @@ def draw(files, g, cache, dpi=100):
     if not g["y_steps"] or y_major is None:
         y_major = nice_step(ymax, 8)
         y_minor = y_major / (4 if round(y_major / 10 ** math.floor(math.log10(y_major)), 6) == 2 else 5)
-    top = math.ceil(ymax * (1.12 if g["labels"] else 1.05) / y_minor) * y_minor
-    y_maj = np.arange(0, top + 1e-9, y_major)
-    y_min = np.arange(0, top + 1e-9, y_minor)
+    if g.get("ylim"):                       # Y zoom: fixed range, steps from its span
+        bottom, top = g["ylim"]
+        span = top - bottom
+        if not g["y_steps"] or y_major is None or span / y_minor > MAX_TICKS:
+            y_major = nice_step(span, 8)
+            y_minor = y_major / (4 if round(y_major / 10 ** math.floor(math.log10(y_major)), 6) == 2 else 5)
+    else:
+        bottom = 0
+        top = math.ceil(ymax * (1.12 if g["labels"] else 1.05) / y_minor) * y_minor
+    first = math.ceil(bottom / y_major - 1e-9) * y_major
+    y_maj = np.arange(first, top + 1e-9, y_major)
+    y_min = np.arange(math.ceil(bottom / y_minor - 1e-9) * y_minor, top + 1e-9, y_minor)
 
     # --- X axis: labels / grid + long ticks / short ticks, from the visible range
     xs, span = None, xlim[1] - xlim[0]
@@ -253,7 +268,7 @@ def draw(files, g, cache, dpi=100):
 
     # --- grid, gates, curves
     grey = "#d9d9d9"
-    for yv in y_maj[1:]:
+    for yv in y_maj[y_maj > bottom]:
         ax.axhline(yv, color=grey, lw=0.25 * 2.845 * k, zorder=0)
     for xv in x_grid:
         if xlim[0] < xv <= xlim[1]:
@@ -277,7 +292,8 @@ def draw(files, g, cache, dpi=100):
             if not zone.any():
                 continue
             j = np.flatnonzero(zone)[np.argmax(y[zone])]
-            ax.text(x[j], y[j] + 0.02 * top, f["name"], color=f["color"], ha="center",
+            ty = min(y[j] + 0.02 * (top - bottom), top - 0.08 * (top - bottom))   # stay inside
+            ax.text(x[j], ty, f["name"], color=f["color"], ha="center",
                     va="bottom", fontsize=fs["labels"], zorder=4)
     elif len(files) > 1:
         handles = [Line2D([], [], color=f["color"], lw=f["linewidth"] * 2.845 * k,
@@ -286,7 +302,7 @@ def draw(files, g, cache, dpi=100):
                   prop={"size": fs["labels"]}, handlelength=3)
 
     # --- axes and ticks
-    ax.set_ylim(0, top)
+    ax.set_ylim(bottom, top)
     ax.yaxis.set_major_locator(FixedLocator(y_maj))
     ax.yaxis.set_minor_locator(FixedLocator(y_min))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
@@ -438,14 +454,23 @@ class App(BaseTk):
         self.v_ylab = tk.StringVar(value="Count")
         self.v_out = tk.StringVar(value="1024")
         self.v_xmin, self.v_xmax = tk.StringVar(), tk.StringVar()
+        self.v_ymin, self.v_ymax = tk.StringVar(), tk.StringVar()
         self.v_labels = tk.BooleanVar(value=True)
         self.v_xsteps, self.v_ysteps = tk.StringVar(), tk.StringVar()
 
         self._row(fr, 0, "X axis title", self.v_xlab, 30)
         self._row(fr, 1, "Y axis title", self.v_ylab, 30)
-        cb = ttk.Combobox(fr, textvariable=self.v_out, width=10, values=CHANNEL_CHOICES)
-        self._row(fr, 2, "Output channels", widget=cb, hint="X axis resolution (all curves)")
-        self._row(fr, 4, "X zoom", widget=self._pair(fr, self.v_xmin, self.v_xmax), hint="empty = all")
+        cb = ttk.Combobox(fr, textvariable=self.v_out, width=10, values=CHANNEL_CHOICES,
+                          state="readonly")
+        cb.bind("<<ComboboxSelected>>", lambda e: self._output_changed())
+        self._applied_out = 1024.0
+        self._row(fr, 2, "Output channels", widget=cb, hint="X axis unit (all curves)")
+        xz = self._pair(fr, self.v_xmin, self.v_xmax)
+        for ent in xz.winfo_children():
+            ent.bind("<FocusOut>", lambda e: self._clamp_xzoom())
+            ent.bind("<Return>", lambda e: self._clamp_xzoom())
+        self._row(fr, 3, "X zoom", widget=xz, hint="empty = all (0 to output channels)")
+        self._row(fr, 4, "Y zoom", widget=self._pair(fr, self.v_ymin, self.v_ymax), hint="empty = auto")
         self._row(fr, 5, "X steps", self.v_xsteps, 12, hint="labels, grid, ticks (empty = auto)")
         self._row(fr, 6, "Y steps", self.v_ysteps, 12, hint="labels, ticks (empty = auto)")
         cf = ttk.Frame(fr)
@@ -453,7 +478,7 @@ class App(BaseTk):
                         variable=self.v_labels).pack(anchor="w")
         cf.grid(row=7, column=0, columnspan=3, sticky="w", pady=(2, 0))
         for v in (self.v_xlab, self.v_ylab, self.v_out, self.v_xmin, self.v_xmax,
-                  self.v_labels, self.v_xsteps, self.v_ysteps):
+                  self.v_ymin, self.v_ymax, self.v_labels, self.v_xsteps, self.v_ysteps):
             v.trace_add("write", lambda *a: self.schedule())
 
     def _build_image(self, parent):
@@ -523,7 +548,7 @@ class App(BaseTk):
         cb = ttk.Combobox(fr, textvariable=self.v_lt, values=list(LINETYPES), state="readonly", width=12)
         self.curve_widgets.append(self._row(fr, 3, "Line type", widget=cb))
         ss = ttk.Spinbox(fr, textvariable=self.v_smooth, from_=1, to=20, increment=1, width=8)
-        self.curve_widgets.append(self._row(fr, 4, "Smoothing", widget=ss, hint="channels per bin"))
+        self.curve_widgets.append(self._row(fr, 4, "Smoothing", widget=ss, hint="classes merged (1 = 1024 classes)"))
         gf = ttk.Frame(fr)
         e1 = ttk.Entry(gf, textvariable=self.v_gmin, width=7)
         e2 = ttk.Entry(gf, textvariable=self.v_gmax, width=7)
@@ -774,16 +799,75 @@ class App(BaseTk):
             if c:
                 self.v_color.set(c)
 
+    @staticmethod
+    def _fmt(v):
+        return f"{float(f'{v:.6g}'):g}"
+
+    def _output_changed(self):
+        """New output channels: X zoom, X steps and gates keep the same place on the curves."""
+        new = number(self.v_out.get(), 1024)
+        ratio = new / self._applied_out
+        self._applied_out = new
+        if ratio == 1:
+            return
+        for var in (self.v_xmin, self.v_xmax):
+            try:
+                v = number(var.get())
+                if v is not None:
+                    var.set(self._fmt(v * ratio))
+            except ValueError:
+                pass
+        try:
+            steps = numbers(self.v_xsteps.get(), 3)
+            if steps:
+                self.v_xsteps.set(",".join(self._fmt(v * ratio) for v in steps))
+        except ValueError:
+            pass
+        for f in self.files:
+            if f.get("gate"):
+                f["gate"] = [f["gate"][0] * ratio, f["gate"][1] * ratio]
+        i = self._index()
+        if i is not None:
+            self._fill_curve_form()
+        self.schedule()
+
+    def _clamp_xzoom(self):
+        """Keep the X zoom inside 0 - output channels (corrects the field itself)."""
+        out = number(self.v_out.get(), 1024)
+        for var in (self.v_xmin, self.v_xmax):
+            try:
+                v = number(var.get())
+            except ValueError:
+                continue
+            if v is not None and (v < 0 or v > out):
+                var.set(self._fmt(min(max(v, 0.0), out)))
+
     # ----- shared settings -----
     def settings(self):
         g = {"xlab": self.v_xlab.get(), "ylab": self.v_ylab.get(), "labels": self.v_labels.get()}
         g["out_channels"] = number(self.v_out.get(), 1024)
         if g["out_channels"] <= 1:
             raise ValueError("Channel numbers must be positive.")
-        xmin, xmax = number(self.v_xmin.get()), number(self.v_xmax.get())
-        g["xlim"] = [xmin, xmax] if xmin is not None and xmax is not None and xmin != xmax else None
-        # an invalid step is ignored (automatic steps) instead of blocking the preview
         self._warnings = []
+        out = g["out_channels"]
+        try:
+            xmin, xmax = number(self.v_xmin.get()), number(self.v_xmax.get())
+        except ValueError:
+            xmin = xmax = None
+        if xmin is not None and xmax is not None and xmin != xmax:
+            lo, hi = sorted([xmin, xmax])
+            if lo < 0 or hi > out:               # never beyond the channel range
+                self._warnings.append(f"X zoom limited to 0-{out:g}")
+            lo, hi = max(lo, 0.0), min(hi, out)
+            g["xlim"] = [lo, hi] if hi > lo else None
+        else:
+            g["xlim"] = None
+        try:
+            ymin, ymax = number(self.v_ymin.get()), number(self.v_ymax.get())
+        except ValueError:
+            ymin = ymax = None
+        g["ylim"] = sorted([ymin, ymax]) if ymin is not None and ymax is not None and ymin != ymax else None
+        # an invalid step is ignored (automatic steps) instead of blocking the preview
         for key, var, n_max, label in (("x_steps", self.v_xsteps, 3, "X steps"),
                                        ("y_steps", self.v_ysteps, 2, "Y steps")):
             try:
@@ -947,6 +1031,7 @@ class App(BaseTk):
     def _shared_vars(self):
         return {"xlab": self.v_xlab, "ylab": self.v_ylab, 
                 "out_channels": self.v_out, "xmin": self.v_xmin, "xmax": self.v_xmax,
+                "ymin": self.v_ymin, "ymax": self.v_ymax,
                 "labels": self.v_labels, "x_steps": self.v_xsteps,
                 "y_steps": self.v_ysteps, "px_width": self.v_pxw, "px_height": self.v_pxh,
                 **{f"font_{key}": var for key, var in self.v_fonts.items()}}
@@ -977,6 +1062,7 @@ class App(BaseTk):
                     self.cache[f["path"]] = read_fcs(f["path"])
                 files.append(f)
             self.files = files
+            self._applied_out = number(self.v_out.get(), 1024)
         except Exception as e:
             messagebox.showerror(APP, f"Unreadable settings file:\n{e}")
             return

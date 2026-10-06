@@ -7,7 +7,7 @@ content / ploidy) and exports a clean, journal-ready figure (PNG, TIFF, PDF, SVG
 with the peak statistics. It comes as a standalone desktop application (Windows, Linux) and
 as an R command-line script that produces the same figures.
 
-Version **1.1.2** - see [CHANGELOG.md](CHANGELOG.md).
+Version **1.2.0** - see [CHANGELOG.md](CHANGELOG.md).
 
 ![CytoHisto interface](docs/screenshot.png)
 
@@ -32,6 +32,10 @@ common number of **output channels** (e.g. 1024, the convention for DNA content)
 file (0-1023) and a 16-bit file (0-65535) are therefore overlaid correctly, without any
 manual rescaling. The input range can still be overridden per file if an instrument
 declares a wrong value.
+
+The histogram itself always has **1024 classes over the full scale**: the output channels
+only change the X axis unit. Switching from 1024 to 65536 channels changes neither the Y
+axis nor the shape of the curves, and zoom, steps and gates follow automatically.
 
 ### 3. A final figure, not a screenshot
 - **Image size in pixels**; text, lines and ticks **scale with the image width**, so a
@@ -75,7 +79,7 @@ while you type. A cursor line shows the x / y coordinates under the mouse.
 | System | Program |
 |---|---|
 | Windows 10/11 (64-bit) | [`CytoHisto-1.1.0-windows-x86_64.exe`](https://github.com/ntzv-git/cytohisto/raw/main/bin/windows/CytoHisto-1.1.0-windows-x86_64.exe) |
-| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.1.2-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.1.2-linux-x86_64) |
+| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.2.0-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.2.0-linux-x86_64) |
 
 Click a link to download the program. It runs on its own: nothing else needs to be installed.
 
@@ -87,16 +91,16 @@ Click a link to download the program. It runs on its own: nothing else needs to 
   It takes a few seconds to start (the program unpacks itself).
 - **Linux**: make the file executable, then run it:
   ```bash
-  chmod +x CytoHisto-1.1.2-linux-x86_64
-  ./CytoHisto-1.1.2-linux-x86_64
+  chmod +x CytoHisto-1.2.0-linux-x86_64
+  ./CytoHisto-1.2.0-linux-x86_64
   ```
 
 ---
 
 ## Using the application
 
-1. **Plot settings** (all curves): axis titles, output channels (X resolution), X zoom,
-   axis steps (empty = automatic, e.g. `200,100,20` for X labels/grid/ticks), names above the
+1. **Plot settings** (all curves): axis titles, output channels (X axis unit), X zoom and
+   Y zoom, axis steps (empty = automatic, e.g. `200,100,20` for X labels/grid/ticks), names above the
    peaks or legend.
 2. **Image**: size in pixels (default 2000 x 1000) and the five text sizes.
 3. **FCS files**: drop, paste or add `.fcs` files; they are overlaid and the Y axis fits the
@@ -117,7 +121,8 @@ Rscript cytohisto.R -L -X 50,250 -s 2 -o comparison.png -P 3000x1500 \
     -f sample_B.fcs -n "Sample B" -c crimson -w 0.8 -g 195,235
 ```
 
-File options (`-n` label, `-c` colour, `-w` line width, `-t` line type, `-s` smoothing,
+Shared options include `-C` output channels, `-X` / `-Y` zoom, `-L` names above the peaks,
+`-P` image size in pixels. File options (`-n` label, `-c` colour, `-w` line width, `-t` line type, `-s` smoothing,
 `-g` gate, `-p` parameter, `-i` input channels) apply to the preceding `-f`; placed before
 the first `-f`, they apply to every file. The statistics table is printed in the console.
 

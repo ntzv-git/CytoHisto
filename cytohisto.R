@@ -7,7 +7,7 @@
 #
 # Run "Rscript cytohisto.R -h" for the list of options.
 
-VERSION <- "1.1.2"
+VERSION <- "1.2.0"
 
 suppressPackageStartupMessages(library(ggplot2))
 
@@ -25,8 +25,9 @@ default for every file):
                              (quote it: otherwise the shell reads # as a comment)
   -w, --linewidth MM         line width (default 0.5)
   -t, --linetype TYPE        solid, dashed, dotted, dotdash, longdash (default solid)
-  -s, --smooth N             bin width in channels (default 1 = raw data); the Y axis stays
-                             in events per channel, so peak height does not change
+  -s, --smooth N             number of classes merged (default 1); the histogram always has
+                             1024 classes over the full scale, so neither smoothing nor the
+                             output channels change the Y axis
   -g, --gate MIN,MAX         highlighted region in the curve colour + %, mean, CV in the console
   -p, --parameter NAME       parameter to plot (default: DNA if present, else the first non-time one)
   -i, --in-channels N        input range of this file (default: read from the file, $PnR);
@@ -40,7 +41,9 @@ Shared options:
   -x, --xlab TEXT            X axis title (default "Fluorescence intensity (channels)")
   -y, --ylab TEXT            Y axis title (default "Count")
   -C, --channels N           output channels = X axis resolution, same for all files (default 1024)
-  -X, --xlim MIN,MAX         X zoom (e.g. 50,250); the Y axis fits the visible peaks
+  -X, --xlim MIN,MAX         X zoom (e.g. 50,250), limited to 0 - output channels; the Y axis
+                             fits the visible peaks
+  -Y, --ylim MIN,MAX         Y zoom (e.g. 0,300); default: 0 to just above the highest peak
   -L, --labels               write each curve name above its peak (instead of a legend)
   -P, --pixels WxH           image size in pixels (default 2000x1000); text, lines and ticks
                              scale with the width
@@ -126,6 +129,7 @@ parse_args <- function(args) {
       "-i" = , "--in-channels" = set("in_range", nums(val, 1, opt)),
       "-C" = , "--channels"    = { g$channels <- nums(val, 1, opt) },
       "-X" = , "--xlim"        = { g$xlim <- sort(nums(val, 2, opt)) },
+      "-Y" = , "--ylim"        = { g$ylim <- sort(nums(val, 2, opt)) },
       "-W" = , "--width"       = { g$width <- nums(val, 1, opt) },
       "-P" = , "--pixels"      = { g$pixels <- suppressWarnings(as.numeric(strsplit(tolower(val), "x")[[1]]))
                                    if (length(g$pixels) != 2 || anyNA(g$pixels) || any(g$pixels < 100))
@@ -222,6 +226,12 @@ n <- length(a$files)
 palette <- c("black", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9")
 out <- g$channels
 xlim <- if (!is.null(g$xlim)) g$xlim else c(0, out)
+if (xlim[1] < 0 || xlim[2] > out) {                 # never beyond the channel range
+  message("X zoom limited to 0-", out)
+  xlim <- c(max(xlim[1], 0), min(xlim[2], out))
+}
+if (xlim[2] <= xlim[1]) stop("Empty X zoom after limiting it to 0-", out)
+BASE_BINS <- 1024   # histogram classes over the full scale, whatever the output channels
 g$height <- g$width * g$pixels[2] / g$pixels[1]   # proportions given by the pixel size
 k <- g$width / 170   # scale factor: everything is designed for 170 mm, then proportional
 
@@ -241,12 +251,14 @@ for (i in seq_len(n)) {
   if (is.null(f$name)) f$name <- sub("\\.fcs$", "", basename(f$path), ignore.case = TRUE)
   if (is.null(f$color)) f$color <- palette[(i - 1) %% length(palette) + 1]
 
-  # count per bin (width = smooth channels)
-  w <- f$smooth
-  nb <- ceiling(out / w)
+  # histogram with a fixed resolution (BASE_BINS classes over the full scale): the output
+  # channels only set the X unit, so the Y axis and the curve shape do not depend on them
+  base <- out / BASE_BINS                               # class width in output channels
+  w <- base * f$smooth                                  # smoothing merges classes
+  nb <- ceiling(BASE_BINS / f$smooth)
   cnt <- tabulate(pmin(pmax(floor(v / w) + 1, 1), nb), nb)
-  x <- (seq_len(nb) - 1) * w + (w - 1) / 2             # 1 channel -> x = channel number
-  y <- cnt / w                                          # events per channel
+  x <- (seq_len(nb) - 1) * w + (w - base) / 2           # at 1024 channels: x = channel number
+  y <- cnt / f$smooth                                   # events per class
   dc <- data.frame(x = x, y = y)
   curves[[i]] <- dc[dc$x >= xlim[1] & dc$x <= xlim[2], ]   # only the visible range is drawn
 
@@ -278,9 +290,20 @@ if (ymax / y_steps[["minor"]] > 400 || ymax / y_steps[["major"]] > 60) {   # wou
   p <- nice_step(ymax, 8)
   y_steps <- c(major = p, minor = p / if (p / 10^floor(log10(p)) == 2) 4 else 5)
 }
-top <- ceiling(ymax * (if (g$labels) 1.12 else 1.05) / y_steps[["minor"]]) * y_steps[["minor"]]
-y_major <- seq(0, top, by = y_steps[["major"]])
-y_minor <- setdiff(seq(0, top, by = y_steps[["minor"]]), y_major)
+if (!is.null(g$ylim)) {                              # Y zoom: fixed range, steps from its span
+  bottom <- g$ylim[1]; top <- g$ylim[2]
+  if (is.null(g$y_steps) || diff(g$ylim) / y_steps[["minor"]] > 400) {
+    p <- nice_step(diff(g$ylim), 8)
+    y_steps <- c(major = p, minor = p / if (p / 10^floor(log10(p)) == 2) 4 else 5)
+  }
+} else {
+  bottom <- 0
+  top <- ceiling(ymax * (if (g$labels) 1.12 else 1.05) / y_steps[["minor"]]) * y_steps[["minor"]]
+}
+y_major <- seq(ceiling(bottom / y_steps[["major"]] - 1e-9) * y_steps[["major"]], top, by = y_steps[["major"]])
+y_minor <- setdiff(round(seq(ceiling(bottom / y_steps[["minor"]] - 1e-9) * y_steps[["minor"]], top,
+                             by = y_steps[["minor"]]), 9), round(y_major, 9))
+for (i in seq_len(n)) curves[[i]]$y <- pmin(pmax(curves[[i]]$y, bottom), top)   # stay in the frame
 message(sprintf("Y axis: highest peak %g -> steps %g / %g", ymax, y_steps[["major"]], y_steps[["minor"]]))
 
 # labels every L (about 6 over the visible range), grid + long ticks every L/2,
@@ -302,7 +325,7 @@ message(sprintf("X axis: labels %g, grid %g, ticks %g", x_steps[["labels"]], x_s
 
 # ---- Figure --------------------------------------------------------------------------
 pg <- ggplot()     # grid first, so that it stays under the curves
-grid_y <- y_major[y_major > 0]
+grid_y <- y_major[y_major > bottom]
 grid_x <- x_grid[x_grid > xlim[1] & x_grid <= xlim[2]]
 if (length(grid_y)) pg <- pg + geom_hline(yintercept = grid_y, colour = "grey85", linewidth = 0.25 * k)
 if (length(grid_x)) pg <- pg + geom_vline(xintercept = grid_x, colour = "grey85", linewidth = 0.25 * k)
@@ -311,7 +334,7 @@ if (length(grid_x)) pg <- pg + geom_vline(xintercept = grid_x, colour = "grey85"
 for (f in a$files) {
   if (is.null(f$gate) || f$gate[2] <= xlim[1] || f$gate[1] >= xlim[2]) next
   pg <- pg + annotate("rect", xmin = max(f$gate[1], xlim[1]), xmax = min(f$gate[2], xlim[2]),
-                      ymin = 0, ymax = top, fill = f$color, alpha = 0.15)
+                      ymin = bottom, ymax = top, fill = f$color, alpha = 0.15)
 }
 
 for (i in seq_len(n))
@@ -333,7 +356,7 @@ if (g$labels) {
       zone <- inside_edges(dc$x)
       if (!any(zone)) next
       j <- which(zone)[which.max(dc$y[zone])]
-      px <- dc$x[j]; py <- dc$y[j] + 0.02 * top
+      px <- dc$x[j]; py <- min(dc$y[j] + 0.02 * (top - bottom), top - 0.08 * (top - bottom))
     }
     pg <- pg + annotate("text", x = px, y = py, label = labels[i], colour = f$color,
                         vjust = 0, size = g$fonts[["labels"]] * k / .pt)
@@ -355,7 +378,7 @@ for (xm in x_ticks) pg <- pg + annotation_custom(tick_x, xmin = xm, xmax = xm, y
 
 pg <- pg +
   scale_y_continuous(breaks = y_major) +
-  coord_cartesian(xlim = xlim, ylim = c(0, top), expand = FALSE, clip = "off") +
+  coord_cartesian(xlim = xlim, ylim = c(bottom, top), expand = FALSE, clip = "off") +
   labs(x = g$xlab, y = g$ylab) +
   theme_classic(base_size = 9 * k) +   # line widths follow the image width, not the fonts
   theme(axis.text = element_text(colour = "black"),
