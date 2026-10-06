@@ -20,6 +20,9 @@ matplotlib.use("TkAgg")
 import matplotlib.colors as mcolors
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+# PDF and SVG writers are loaded by matplotlib only when saving: import them explicitly so
+# that PyInstaller bundles them in the standalone program (otherwise PDF/SVG export fails)
+from matplotlib.backends import backend_pdf, backend_svg
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator, FuncFormatter
@@ -34,9 +37,10 @@ except Exception:  # pragma: no cover
 matplotlib.rcParams["font.family"] = "sans-serif"
 matplotlib.rcParams["font.sans-serif"] = ["Arial", "Liberation Sans", "DejaVu Sans"]
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
+_EXPORT_BACKENDS = (backend_pdf, backend_svg)
 
 APP = "CytoHisto"
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 PALETTE = ["#000000", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 CHANNEL_CHOICES = ["256", "512", "1024", "2048", "4096", "8192", "16384", "32768", "65536",
                    "262144", "1048576"]

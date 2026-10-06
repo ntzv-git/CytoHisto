@@ -7,7 +7,7 @@ content / ploidy) and exports a clean, journal-ready figure (PNG, TIFF, PDF, SVG
 with the peak statistics. It comes as a standalone desktop application (Windows, Linux) and
 as an R command-line script that produces the same figures.
 
-Version **1.1.1** - see [CHANGELOG.md](CHANGELOG.md).
+Version **1.1.2** - see [CHANGELOG.md](CHANGELOG.md).
 
 ![CytoHisto interface](docs/screenshot.png)
 
@@ -75,17 +75,20 @@ while you type. A cursor line shows the x / y coordinates under the mouse.
 | System | Program |
 |---|---|
 | Windows 10/11 (64-bit) | [`CytoHisto-1.1.0-windows-x86_64.exe`](https://github.com/ntzv-git/cytohisto/raw/main/bin/windows/CytoHisto-1.1.0-windows-x86_64.exe) |
-| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.1.1-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.1.1-linux-x86_64) |
+| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.1.2-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.1.2-linux-x86_64) |
 
 Click a link to download the program. It runs on its own: nothing else needs to be installed.
+
+> The Windows 1.1.0 build is affected by the PDF/SVG export issue fixed in 1.1.2 (see the
+> changelog); PNG and TIFF work. An updated Windows build will replace it.
 
 - **Windows**: double-click `CytoHisto-1.1.0-windows-x86_64.exe`. The program is not signed,
   so SmartScreen may show "Windows protected your PC": click *More info* then *Run anyway*.
   It takes a few seconds to start (the program unpacks itself).
 - **Linux**: make the file executable, then run it:
   ```bash
-  chmod +x CytoHisto-1.1.1-linux-x86_64
-  ./CytoHisto-1.1.1-linux-x86_64
+  chmod +x CytoHisto-1.1.2-linux-x86_64
+  ./CytoHisto-1.1.2-linux-x86_64
   ```
 
 ---

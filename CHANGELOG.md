@@ -2,6 +2,13 @@
 
 All notable changes to CytoHisto. Versions follow [semantic versioning](https://semver.org).
 
+## [1.1.2] - 2026-10-06
+### Fixed
+- Standalone programs (Linux and Windows builds): saving as PDF or SVG failed with
+  "No module named 'matplotlib.backends.backend_pdf'" (or `backend_svg`). These writers are
+  now imported explicitly so that PyInstaller bundles them. PNG and TIFF were not affected,
+  nor was `python cytohisto.py`.
+
 ## [1.1.1] - 2026-10-06
 ### Fixed
 - Linux: figures were always saved as PNG, whatever the format selected in the save
