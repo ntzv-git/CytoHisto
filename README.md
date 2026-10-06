@@ -7,7 +7,7 @@ content / ploidy) and exports a clean, journal-ready figure (PNG, TIFF, PDF, SVG
 with the peak statistics. It comes as a standalone desktop application (Windows, Linux) and
 as an R command-line script that produces the same figures.
 
-Version **1.3.0** - see [CHANGELOG.md](CHANGELOG.md).
+Version **1.3.1** - see [CHANGELOG.md](CHANGELOG.md).
 
 ![CytoHisto interface](docs/screenshot.png)
 
@@ -79,7 +79,7 @@ while you type. A cursor line shows the x / y coordinates under the mouse.
 | System | Program |
 |---|---|
 | Windows 10/11 (64-bit) | [`CytoHisto-1.1.0-windows-x86_64.exe`](https://github.com/ntzv-git/cytohisto/raw/main/bin/windows/CytoHisto-1.1.0-windows-x86_64.exe) |
-| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.3.0-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.3.0-linux-x86_64) |
+| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.3.1-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.3.1-linux-x86_64) |
 
 Click a link to download the program. It runs on its own: nothing else needs to be installed.
 
@@ -91,8 +91,8 @@ Click a link to download the program. It runs on its own: nothing else needs to 
   It takes a few seconds to start (the program unpacks itself).
 - **Linux**: make the file executable, then run it:
   ```bash
-  chmod +x CytoHisto-1.3.0-linux-x86_64
-  ./CytoHisto-1.3.0-linux-x86_64
+  chmod +x CytoHisto-1.3.1-linux-x86_64
+  ./CytoHisto-1.3.1-linux-x86_64
   ```
 
 ---
@@ -110,6 +110,7 @@ Click a link to download the program. It runs on its own: nothing else needs to 
 4. **Selected curve**: the last file clicked; set its label, colour, line width and type, smoothing,
    gate, parameter and input channels.
 5. **Save figure...** (PNG, TIFF, PDF, SVG), **Statistics (CSV)...**, **Save / Open settings...**
+   Every save uses the selected files only.
 
 ---
 

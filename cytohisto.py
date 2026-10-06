@@ -40,7 +40,7 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 _EXPORT_BACKENDS = (backend_pdf, backend_svg)
 
 APP = "CytoHisto"
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 PALETTE = ["#000000", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 CHANNEL_CHOICES = ["256", "512", "1024", "2048", "4096", "8192", "16384", "32768", "65536",
                    "262144", "1048576"]
@@ -416,6 +416,8 @@ class App(BaseTk):
 
         # mouse wheel scrolls the panel only while the pointer is over it
         def wheel(e):
+            if getattr(self, "_over_list", False):   # the file list scrolls itself
+                return
             canvas.yview_scroll(-1 if (getattr(e, "delta", 0) > 0 or e.num == 4) else 1, "units")
 
         def enter(_):
@@ -505,13 +507,22 @@ class App(BaseTk):
         fr = ttk.LabelFrame(parent, text="FCS files (selected files are plotted)", padding=6)
         fr.pack(fill="x", pady=(10, 0))
         cols = ("file", "label", "input")
-        self.tree = ttk.Treeview(fr, columns=cols, show="tree headings", height=4, selectmode="extended")
+        box = ttk.Frame(fr)                  # list + vertical scroll bar
+        box.pack(fill="x")
+        self.tree = ttk.Treeview(box, columns=cols, show="tree headings", height=8, selectmode="extended")
+        bar = ttk.Scrollbar(box, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=bar.set)
+        bar.pack(side="right", fill="y")
         self.tree.heading("#0", text="")
         self.tree.column("#0", width=52, minwidth=52, stretch=False, anchor="w")
         for c, t, w in zip(cols, ("File", "Label", "Input ch."), (160, 140, 70)):
             self.tree.heading(c, text=t)
             self.tree.column(c, width=w, anchor="w")
-        self.tree.pack(fill="x")
+        self.tree.pack(side="left", fill="x", expand=True)
+        self._over_list = False              # mouse wheel over the list scrolls the list only
+        for w in (self.tree, bar):
+            w.bind("<Enter>", lambda e: setattr(self, "_over_list", True), add="+")
+            w.bind("<Leave>", lambda e: setattr(self, "_over_list", False), add="+")
         # only the selected files are plotted (Ctrl+click, Shift+click, Ctrl+A)
         self.tree.bind("<<TreeviewSelect>>", lambda e: self._selection_changed())
         self.tree.bind("<Control-Button-1>", self._ctrl_click)
@@ -1073,7 +1084,9 @@ class App(BaseTk):
         self.status.set(f"Figure saved: {path}{size}")
 
     def save_stats(self):
+        """Statistics of the selected (plotted) files."""
         if not self.last_stats:
+            messagebox.showinfo(APP, "Select at least one file first.")
             return
         path = filedialog.asksaveasfilename(title="Statistics", defaultextension=".csv",
                                             filetypes=[("CSV", "*.csv")], initialfile="statistics")
@@ -1094,14 +1107,18 @@ class App(BaseTk):
                 **{f"font_{key}": var for key, var in self.v_fonts.items()}}
 
     def save_settings(self):
+        if not self._plotted():
+            messagebox.showinfo(APP, "Select the files to save in the settings first.")
+            return
         path = filedialog.asksaveasfilename(title="Save settings", defaultextension=".json",
                                             filetypes=[("Settings", "*.json")], initialfile="settings")
         if not path:
             return
-        data = {"shared": {k: v.get() for k, v in self._shared_vars().items()}, "files": self.files}
+        plotted = self._plotted()            # like the figure: only the selected files
+        data = {"shared": {k: v.get() for k, v in self._shared_vars().items()}, "files": plotted}
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
-        self.status.set(f"Settings saved: {path}")
+        self.status.set(f"Settings saved ({len(plotted)} selected file(s)): {path}")
 
     def open_settings(self):
         path = filedialog.askopenfilename(title="Open settings", filetypes=[("Settings", "*.json")])

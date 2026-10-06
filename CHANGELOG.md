@@ -2,6 +2,12 @@
 
 All notable changes to CytoHisto. Versions follow [semantic versioning](https://semver.org).
 
+## [1.3.1] - 2026-10-06
+### Changed
+- The file list is taller (8 rows) and has a scroll bar; the mouse wheel scrolls the list
+  when the pointer is over it (the settings panel otherwise).
+- Every save uses the selected files only: figure, statistics (CSV) and settings (JSON).
+
 ## [1.3.0] - 2026-10-06
 ### Added
 - **Only the selected files are plotted.** The file list accepts multiple selection
