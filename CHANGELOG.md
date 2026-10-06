@@ -3,6 +3,9 @@
 All notable changes to CytoHisto. Versions follow [semantic versioning](https://semver.org).
 
 ## [1.1.0] - 2026-10-06
+### Documentation
+- README rewritten in Markdown (`README.md`) with screenshots; ready-to-use programs in `bin/`.
+
 ### Changed
 - **Input channels are now set per file** (graphical application and R version).
   Each file is converted with its own input range, read from its `$PnR` keyword, so files

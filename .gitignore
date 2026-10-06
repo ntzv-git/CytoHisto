@@ -6,7 +6,7 @@ dist/
 .venv-linux/
 __pycache__/
 *.pyc
-# figures and data produced while testing
+# figures and data produced while testing (README images in docs/ are kept)
 *.png
 *.tiff
 *.tif
@@ -14,3 +14,4 @@ __pycache__/
 *.svg
 *.csv
 *.fcs
+!docs/*.png
