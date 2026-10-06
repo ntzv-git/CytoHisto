@@ -152,3 +152,10 @@ The result is written to `dist/`.
 | `bin/` | ready-to-use programs |
 | `docs/` | images used in this README |
 | `CHANGELOG.md` | version history |
+
+---
+
+## License
+
+[MIT](LICENSE) - Copyright (c) 2026 Emmanuel Clostres. Free to use, modify and redistribute,
+including in other projects, provided the licence notice is kept.
