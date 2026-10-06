@@ -72,16 +72,21 @@ while you type. A cursor line shows the x / y coordinates under the mouse.
 
 ## Download
 
-| System | File |
+| System | Program |
 |---|---|
-| Windows 10/11 (64-bit) | `bin/windows/CytoHisto.exe` |
-| Linux x86-64 (built on Ubuntu 24.04) | [`bin/linux/CytoHisto-1.1.0-linux-x86_64`](bin/linux/) |
+| Windows 10/11 (64-bit) | [`CytoHisto-1.1.0-windows-x86_64.exe`](https://github.com/ntzv-git/cytohisto/raw/main/bin/windows/CytoHisto-1.1.0-windows-x86_64.exe) |
+| Linux x86-64 (built on Ubuntu 24.04) | [`CytoHisto-1.1.0-linux-x86_64`](https://github.com/ntzv-git/cytohisto/raw/main/bin/linux/CytoHisto-1.1.0-linux-x86_64) |
 
-The programs run on their own; nothing else needs to be installed.
+Click a link to download the program. It runs on its own: nothing else needs to be installed.
 
-- **Windows**: double-click `CytoHisto.exe`. The program is not signed, so SmartScreen may
-  show "Windows protected your PC": click *More info* then *Run anyway*.
-- **Linux**: `chmod +x CytoHisto-1.1.0-linux-x86_64 && ./CytoHisto-1.1.0-linux-x86_64`
+- **Windows**: double-click `CytoHisto-1.1.0-windows-x86_64.exe`. The program is not signed,
+  so SmartScreen may show "Windows protected your PC": click *More info* then *Run anyway*.
+  It takes a few seconds to start (the program unpacks itself).
+- **Linux**: make the file executable, then run it:
+  ```bash
+  chmod +x CytoHisto-1.1.0-linux-x86_64
+  ./CytoHisto-1.1.0-linux-x86_64
+  ```
 
 ---
 
