@@ -36,7 +36,7 @@ matplotlib.rcParams["font.sans-serif"] = ["Arial", "Liberation Sans", "DejaVu Sa
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 APP = "CytoHisto"
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 PALETTE = ["#000000", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 CHANNEL_CHOICES = ["256", "512", "1024", "2048", "4096", "8192", "16384", "32768", "65536",
                    "262144", "1048576"]
@@ -901,11 +901,17 @@ class App(BaseTk):
         if not self.files:
             messagebox.showinfo(APP, "Add at least one .fcs file first.")
             return
+        formats = {"PNG": ".png", "TIFF": ".tiff", "PDF": ".pdf", "SVG": ".svg"}
+        chosen = tk.StringVar(self, value="PNG")   # format picked in the dialog's type list
         path = filedialog.asksaveasfilename(
-            title="Save figure", defaultextension=".png", initialfile="histogram",
-            filetypes=[("PNG", "*.png"), ("TIFF", "*.tiff"), ("PDF", "*.pdf"), ("SVG", "*.svg")])
+            title="Save figure", initialfile="histogram", typevariable=chosen,
+            filetypes=[(name, "*" + ext) for name, ext in formats.items()])
         if not path:
             return
+        # Tk's Linux dialog ignores the selected type when adding an extension: use the
+        # extension typed by the user if it is a known one, otherwise the selected format
+        if os.path.splitext(path)[1].lower() not in (".png", ".tif", ".tiff", ".pdf", ".svg"):
+            path += formats.get(chosen.get(), ".png")
         try:
             g = self.settings()
             dpi = g["px"] / (g["width"] / 25.4)

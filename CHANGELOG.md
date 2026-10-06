@@ -2,6 +2,12 @@
 
 All notable changes to CytoHisto. Versions follow [semantic versioning](https://semver.org).
 
+## [1.1.1] - 2026-10-06
+### Fixed
+- Linux: figures were always saved as PNG, whatever the format selected in the save
+  dialog, when the file name was typed without an extension. The extension now follows the
+  selected format (PNG, TIFF, PDF, SVG); an extension typed in the name still takes priority.
+
 ## [1.1.0] - 2026-10-06
 ### Documentation
 - README rewritten in Markdown (`README.md`) with screenshots; ready-to-use programs in `bin/`.
